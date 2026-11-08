@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-mist-950 text-ink font-sans antialiased;
+  letter-spacing: -0.01em;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Apple-style headlines: semibold, tight tracking */
+.font-display {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.font-mono,
+.num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Split-flap cards (see components/FlipClock.tsx) ---------- */
+.flip {
+  --flip-bg: #1d1d1f;
+  --flip-fg: #f5f5f7;
+  --flip-h: 1.32em;
+  --flip-r: 0.14em;
+  position: relative;
+  display: inline-block;
+  height: var(--flip-h);
+  line-height: var(--flip-h);
+  border-radius: var(--flip-r);
+  perspective: 6em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--flip-fg);
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.12),
+    0 0.12em 0.3em rgba(0, 0, 0, 0.14);
+}
+.flip-accent {
+  --flip-bg: #007a87;
+  --flip-fg: #ffffff;
+}
+.flip-bad {
+  --flip-bg: #d70015;
+  --flip-fg: #ffffff;
+}
+.flip-sizer {
+  display: block;
+  visibility: hidden;
+  padding: 0 0.16em;
+  text-align: center;
+}
+.flip-half {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: var(--flip-bg);
+  will-change: transform;
+}
+.flip-half > span {
+  display: block;
+  height: var(--flip-h);
+  line-height: var(--flip-h);
+  text-align: center;
+}
+.flip-top {
+  top: 0;
+  border-radius: var(--flip-r) var(--flip-r) 0 0;
+  transform-origin: 50% 100%;
+  /* top half catches a little more light */
+  background-image: linear-gradient(rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+}
+.flip-bottom {
+  bottom: 0;
+  border-radius: 0 0 var(--flip-r) var(--flip-r);
+  transform-origin: 50% 0%;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.12));
+}
+.flip-bottom > span {
+  margin-top: calc(var(--flip-h) / -2);
+}
+.flip-flap {
+  z-index: 2;
+}
+/* hinge line between the two halves */
+.flip::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 0.5px);
+  height: 1px;
+  background: rgba(0, 0, 0, 0.45);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  z-index: 3;
+  pointer-events: none;
+}
+
+::selection {
+  background: rgba(0, 148, 163, 0.22);
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* Range slider (iOS-like) */
+input[type='range'].slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  width: 100%;
+}
+input[type='range'].slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #007a87 var(--pct, 50%), #e5e5ea var(--pct, 50%));
+}
+input[type='range'].slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: #e5e5ea;
+}
+input[type='range'].slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: #007a87;
+}
+input[type='range'].slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -10px;
+  border-radius: 999px;
+  background: #fff;
+  border: 0.5px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+}
+input[type='range'].slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #fff;
+  border: none;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+}
+
+.scroll-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #d2d2d7;
+  border-radius: 999px;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+.recharts-surface:focus {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
