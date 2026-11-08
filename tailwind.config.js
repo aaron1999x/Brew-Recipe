@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-const sf = ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"', 'Inter', '"Helvetica Neue"', 'Arial', 'sans-serif'];
+const sf = ['"Bricolage Grotesque"', '-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Helvetica Neue"', 'Arial', 'sans-serif'];
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],

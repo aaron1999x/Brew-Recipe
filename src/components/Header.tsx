@@ -84,6 +84,22 @@ export function SyncIndicator() {
   );
 }
 
+/** Competitor name, linked to their site when a URL is set. Opens in a new tab so the brew log stays open. */
+function CompetitorName({ name, url }: { name: string; url?: string }) {
+  const href = url?.trim();
+  if (!href) return <>{name}</>;
+  return (
+    <a
+      href={/^https?:\/\//i.test(href) ? href : `https://${href}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="underline decoration-current/30 underline-offset-4 transition hover:decoration-current"
+    >
+      {name}
+    </a>
+  );
+}
+
 /** Event header. `hero` = big dashboard version; otherwise a compact strip. */
 export function Header({ hero }: { hero?: boolean }) {
   const { db } = useStore();
@@ -105,7 +121,7 @@ export function Header({ hero }: { hero?: boolean }) {
           <span className="mx-2 text-mist-500">·</span>
           {when}
           <span className="mx-2 text-mist-500">·</span>
-          {s.competitor}
+          <CompetitorName name={s.competitor} url={s.competitorUrl} />
         </span>
       </div>
     );
@@ -114,7 +130,9 @@ export function Header({ hero }: { hero?: boolean }) {
   return (
     <header className="mx-auto flex max-w-7xl flex-col gap-6 px-4 pb-8 pt-8 sm:px-6 lg:flex-row lg:items-end lg:justify-between lg:pt-12">
       <div className="min-w-0">
-        <p className="text-[15px] font-semibold text-accent">Competitor · {s.competitor}</p>
+        <p className="text-[15px] font-semibold text-accent">
+          Competitor · <CompetitorName name={s.competitor} url={s.competitorUrl} />
+        </p>
         <h1 className="mt-1 font-display text-[32px] leading-tight text-ink sm:text-5xl">{s.title}</h1>
         <p className="mt-2 text-base text-ink-muted sm:text-lg">
           {s.venue} · {when}

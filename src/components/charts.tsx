@@ -21,7 +21,7 @@ import { SENSORY_KEYS } from '../lib/defaults';
 import { mmss } from '../lib/time';
 
 /** Validated on white (all-pairs CVD + normal-vision); identity also carried by A/B/C labels, legend and table. */
-export const SF = '-apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, sans-serif';
+export const SF = '"Bricolage Grotesque", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
 export const SERIES = ['#0094A3', '#E8590C', '#7048E8'];
 export const SERIES_LABEL = ['A', 'B', 'C'];
 export const ACCENT = '#0094A3'; // dripper teal, chart-weight (UI text uses accent #007A87)

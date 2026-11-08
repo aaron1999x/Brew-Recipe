@@ -32,6 +32,9 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         <Field label="Competitor">
           <TextInput value={draft.competitor} onChange={(e) => set('competitor', e.target.value)} />
         </Field>
+        <Field label="Competitor link" hint="Your name in the header links here. Leave blank for no link.">
+          <TextInput type="url" placeholder="https://atys.dev" value={draft.competitorUrl ?? ''} onChange={(e) => set('competitorUrl', e.target.value)} />
+        </Field>
         <Field label="Event date & time" hint="Asia/Kuala_Lumpur">
           <TextInput type="datetime-local" value={draft.eventDateTime} onChange={(e) => set('eventDateTime', e.target.value)} />
         </Field>

@@ -116,6 +116,7 @@ export interface Settings extends BaseEntity {
   venue: string;
   eventDateTime: string; // yyyy-MM-ddTHH:mm in Asia/Kuala_Lumpur
   competitor: string;
+  competitorUrl?: string;
   beanBudgetG: number;
   defaultRecipeId: string | null;
 }

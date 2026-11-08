@@ -14,20 +14,19 @@ body,
 
 body {
   @apply bg-mist-950 text-ink font-sans antialiased;
-  letter-spacing: -0.01em;
+  font-optical-sizing: auto;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Apple-style headlines: semibold, tight tracking */
 .font-display {
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
 .font-mono,
 .num {
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
 }
 
 /* ---------- Split-flap cards (see components/FlipClock.tsx) ---------- */

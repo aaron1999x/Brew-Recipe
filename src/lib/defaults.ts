@@ -115,6 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
   venue: 'Parc Subang Jaya',
   eventDateTime: '2026-11-27T10:00',
   competitor: 'Aaron',
+  competitorUrl: 'https://atys.dev',
   beanBudgetG: 200,
   defaultRecipeId: STARTER_RECIPE_ID,
 };
