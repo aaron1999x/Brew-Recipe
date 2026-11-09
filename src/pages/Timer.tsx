@@ -302,7 +302,7 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
         ) : null}
 
         {/* controls */}
-        <div className="flex w-full max-w-3xl flex-wrap justify-center gap-3">
+        <div className="flex w-full max-w-3xl flex-wrap items-center justify-center gap-3">
           {phase === 'idle' && (
             <>
               <Button variant="primary" size="lg" className="min-w-[200px]" onClick={() => start(false)}>
