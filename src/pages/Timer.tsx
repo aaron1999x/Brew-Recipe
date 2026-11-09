@@ -9,6 +9,7 @@ import { allRecipes, findRecipe } from './Recipes';
 
 const COMP_S = 360;
 const PREP_S = 180;
+const LEAD_S = 5; // "get ready" countdown before the brew clock starts
 
 let audioCtx: AudioContext | null = null;
 const beep = (freq = 880, ms = 140, times = 1) => {
@@ -52,6 +53,8 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
   const [phase, setPhase] = useState<Phase>('idle');
   const [phaseStart, setPhaseStart] = useState(0);
   const [brewStart, setBrewStart] = useState<number | null>(null);
+  /** When set, a LEAD_S "get ready" countdown is running before the brew clock starts. */
+  const [leadStart, setLeadStart] = useState<number | null>(null);
   const [drawdown, setDrawdown] = useState<number | null>(null);
   const [now, setNow] = useState(() => performance.now());
   const [sound, setSound] = useState(true);
@@ -81,6 +84,7 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
   const phaseTotal = phase === 'prep' ? PREP_S : COMP_S;
   const remaining = Math.max(0, phaseTotal - phaseElapsed);
   const brewElapsed = brewStart != null && drawdown == null ? (now - brewStart) / 1000 : drawdown;
+  const leadLeft = leadStart != null ? LEAD_S - (now - leadStart) / 1000 : null;
 
   // The 0:00 pour (bloom) starts the moment the brew clock starts, so "next" is the first pour still ahead.
   const nextIdx = brewElapsed == null ? 0 : pours.findIndex((p) => p.timeS > brewElapsed);
@@ -89,10 +93,13 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
   const toNext = next && brewElapsed != null ? next.timeS - brewElapsed : null;
 
   const cue = useCallback(
-    (key: string, kind: 'warn' | 'go' | 'end') => {
+    (key: string, kind: 'tick' | 'warn' | 'go' | 'end') => {
       if (fired.current.has(key)) return;
       fired.current.add(key);
-      if (kind === 'warn') {
+      if (kind === 'tick') {
+        if (sound) beep(880, 90, 1);
+        buzz(60);
+      } else if (kind === 'warn') {
         if (sound) beep(660, 120, 1);
         buzz(150);
       } else if (kind === 'go') {
@@ -115,6 +122,23 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
     });
   }, [brewElapsed, pours, cue, drawdown]);
 
+  // Brew clock starts exactly LEAD_S after the lead-in began (not "whenever the next frame lands").
+  const launchBrew = useCallback(
+    (at: number) => {
+      setLeadStart(null);
+      setBrewStart(at);
+      cue(`go-${at}`, 'go');
+    },
+    [cue],
+  );
+
+  // lead-in ticks: 5 (on press) · 4 · 3 · 2 · 1 · go
+  useEffect(() => {
+    if (leadStart == null || leadLeft == null) return;
+    for (let k = LEAD_S - 1; k >= 1; k--) if (leadLeft <= k) cue(`l${leadStart}-${k}`, 'tick');
+    if (leadLeft <= 0) launchBrew(leadStart + LEAD_S * 1000);
+  }, [leadStart, leadLeft, cue, launchBrew]);
+
   // phase transitions
   useEffect(() => {
     if (phase === 'prep' && remaining <= 0) {
@@ -123,6 +147,7 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
       setPhaseStart(performance.now());
     } else if (phase === 'comp' && remaining <= 0) {
       cue('comp-end', 'end');
+      setLeadStart(null);
       setPhase('done');
     } else if (phase !== 'idle' && remaining <= 30 && remaining > 29) {
       cue(`${phase}-30`, 'warn');
@@ -138,17 +163,21 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
     setPhaseStart(performance.now());
   };
 
+  /** Begin the 5-second lead-in; the brew clock starts when it reaches zero. */
   const startBrew = () => {
     fired.current = new Set([...fired.current].filter((k) => !/^[wg]\d/.test(k)));
     setDrawdown(null);
-    setBrewStart(performance.now());
-    if (sound) beep(990, 160, 2);
-    buzz(200);
+    setBrewStart(null);
+    const t = performance.now();
+    setLeadStart(t);
+    setNow(t);
+    cue(`l${t}-${LEAD_S}`, 'tick');
   };
 
   const reset = () => {
     setPhase('idle');
     setBrewStart(null);
+    setLeadStart(null);
     setDrawdown(null);
     fired.current.clear();
   };
@@ -208,7 +237,17 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
         {/* pour cue */}
         {phase === 'comp' || (phase === 'done' && drawdown != null) ? (
           <div className="w-full max-w-3xl rounded-3xl bg-white shadow-card p-5 text-center sm:p-8">
-            {brewStart == null ? (
+            {leadLeft != null ? (
+              <div aria-live="assertive">
+                <div className="text-[15px] font-medium text-ink-muted">Get ready · brew clock starts in</div>
+                <div className="mt-3 text-[30vw] leading-none sm:text-[160px]">
+                  <FlipCard value={String(Math.max(1, Math.ceil(leadLeft)))} tone="accent" />
+                </div>
+                <div className="mt-4 font-display text-2xl text-ink sm:text-3xl">
+                  {pours[0]?.technique || 'First pour'} → <span className="num text-accent">{pours[0]?.targetWeightG ?? '—'} g</span>
+                </div>
+              </div>
+            ) : brewStart == null ? (
               <>
                 <div className="text-sm text-ink-muted">Brew clock not started</div>
                 <div className="mt-1 font-display text-3xl">
@@ -279,9 +318,14 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
               Skip to competition
             </Button>
           )}
-          {phase === 'comp' && brewStart == null && (
+          {phase === 'comp' && brewStart == null && leadStart == null && (
             <Button variant="primary" size="lg" className="h-20 min-w-[260px] text-xl" onClick={startBrew}>
               ▶ Start brew (bloom)
+            </Button>
+          )}
+          {leadStart != null && (
+            <Button size="lg" className="h-20 min-w-[200px] text-xl" onClick={() => launchBrew(performance.now())}>
+              Skip · start now
             </Button>
           )}
           {(phase === 'comp' || phase === 'done') && brewStart != null && drawdown == null && (
@@ -307,7 +351,9 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
             </Button>
           )}
         </div>
-        <p className="text-center text-xs text-ink-faint">Beeps and vibrates 5 s before each pour. Screen stays awake while running.</p>
+        <p className="text-center text-xs text-ink-faint">
+          {LEAD_S} s count-in before the brew clock. Beeps and vibrates 5 s before each pour. Screen stays awake while running.
+        </p>
       </div>
     </div>
   );

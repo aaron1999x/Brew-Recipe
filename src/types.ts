@@ -111,6 +111,15 @@ export interface PracticeDay extends BaseEntity {
   nextSessionPlan: string;
 }
 
+/** Beans removed from the practice budget without brewing (sorting defects, grinder purge, spills…). */
+export interface BeanEntry {
+  id: string;
+  dateTime: string; // ISO instant
+  grams: number;
+  reason: string;
+  note: string;
+}
+
 export interface Settings extends BaseEntity {
   title: string;
   venue: string;
@@ -118,6 +127,8 @@ export interface Settings extends BaseEntity {
   competitor: string;
   competitorUrl?: string;
   beanBudgetG: number;
+  /** Stored on the settings record so no backend/schema change is needed. Missing on older data = []. */
+  beanLog?: BeanEntry[];
   defaultRecipeId: string | null;
 }
 

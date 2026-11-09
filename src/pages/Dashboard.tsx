@@ -1,4 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import type { BeanEntry } from '../types';
+import { BeanBar, BeanLogList, BeanLogModal } from '../components/Beans';
 import {
   CartesianGrid,
   Line,
@@ -13,7 +15,7 @@ import {
   ZAxis,
 } from 'recharts';
 import { useStore } from '../data/store';
-import { bestBrew, brewTitle, extractionYield, parseGrind, practiceDates, sortBrews } from '../lib/calc';
+import { beanUsage, bestBrew, brewTitle, extractionYield, g1, parseGrind, practiceDates, sortBrews } from '../lib/calc';
 import { buildDemo } from '../lib/demo';
 import { STARTER_SPEC } from '../lib/defaults';
 import { navigate } from '../lib/router';
@@ -51,8 +53,9 @@ export function Dashboard() {
   const anim = useChartAnim();
   const brews = useMemo(() => sortBrews(db.brews), [db.brews]);
   const days = practiceDates(brews);
-  const used = brews.reduce((s, b) => s + (b.spec.params.doseG || 0), 0);
-  const remaining = db.settings.beanBudgetG - used;
+  const beans = beanUsage(db);
+  const remaining = g1(beans.remaining);
+  const [beanModal, setBeanModal] = useState<{ open: boolean; entry: BeanEntry | null }>({ open: false, entry: null });
   const best = bestBrew(brews);
   const targets = (db.recipes.find((r) => r.id === db.settings.defaultRecipeId) ?? db.recipes[0])?.targets ?? STARTER_SPEC.targets;
 
@@ -81,9 +84,9 @@ export function Dashboard() {
             <Stat label="Brews logged">
               <CountUp value={brews.length} />
             </Stat>
-            <Stat label="Beans left" sub={`of ${db.settings.beanBudgetG} g`}>
+            <Stat label="Beans left" sub={`of ${beans.budget} g`}>
               <span className={remaining < 30 ? 'text-warn' : ''}>
-                <CountUp value={remaining} decimals={0} />
+                <CountUp value={remaining} decimals={Number.isInteger(remaining) ? 0 : 1} />
               </span>
               <span className="text-base text-ink-faint"> g</span>
             </Stat>
@@ -91,17 +94,20 @@ export function Dashboard() {
               {best ? <CountUp value={best.sensory.overall} decimals={1} /> : '—'}
             </Stat>
           </div>
-          <div className="mt-8 h-1.5 overflow-hidden rounded-full bg-mist-800" aria-label="Practice beans used">
-            <div
-              className="h-full rounded-full bg-accent transition-all duration-1000"
-              style={{ width: `${Math.min(100, (used / Math.max(1, db.settings.beanBudgetG)) * 100)}%` }}
-            />
+          <div className="mt-8">
+            <BeanBar budget={beans.budget} brewed={beans.brewed} discarded={beans.discarded} />
           </div>
-          <div className="mt-1.5 flex justify-between text-xs text-ink-faint">
-            <span className="num">{used} g used</span>
-            <span>practice beans</span>
+          <div className="mt-6 border-t border-mist-700 pt-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h4 className="text-[15px] font-semibold text-ink">Discarded beans</h4>
+              <Button size="sm" onClick={() => setBeanModal({ open: true, entry: null })}>
+                + Log discard
+              </Button>
+            </div>
+            <BeanLogList limit={3} compact onEdit={(e) => setBeanModal({ open: true, entry: e })} />
           </div>
         </Card>
+        <BeanLogModal open={beanModal.open} entry={beanModal.entry} onClose={() => setBeanModal({ open: false, entry: null })} />
         <KeyRulesCard delay={0.08} />
       </div>
 

@@ -1,4 +1,4 @@
-import type { Brew, PracticeDay, Recipe, RecipeSpec } from '../types';
+import type { Brew, DB, PracticeDay, Recipe, RecipeSpec } from '../types';
 import { AQUACODE_STOCK_PPM } from './defaults';
 import { dateKey, fmt, mmss } from './time';
 
@@ -137,4 +137,18 @@ export const diffSpecs = (base: RecipeSpec | undefined, cur: RecipeSpec): Diff[]
 export const changedPaths = (base: RecipeSpec | undefined, cur: RecipeSpec) =>
   new Set(diffSpecs(base, cur).map((d) => d.path));
 
-export const findDay = (days: PracticeDay[], date: string) => days.find((d) => d.date === date && !d.deleted);
+// ---------- Beans ----------
+
+export const DISCARD_REASONS = ['Sorting (defects)', 'Grinder purge', 'Spilled', 'Other'];
+
+export const beanUsage = (db: Pick<DB, 'brews' | 'settings'>) => {
+  const budget = db.settings.beanBudgetG || 0;
+  const brewed = db.brews.reduce((s, b) => s + (b.spec.params.doseG || 0), 0);
+  const discarded = (db.settings.beanLog ?? []).reduce((s, e) => s + (e.grams || 0), 0);
+  return { budget, brewed, discarded, remaining: budget - brewed - discarded };
+};
+
+/** Round to 0.1 g for display without float noise. */
+export const g1 = (n: number) => Math.round(n * 10) / 10;
+
+export const findDay =(days: PracticeDay[], date: string) => days.find((d) => d.date === date && !d.deleted);
