@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ButtonHTMLAttributes,
@@ -229,14 +230,67 @@ export function TextArea({
   placeholder?: string;
   className?: string;
 }) {
+  // Auto-grow: iOS Safari has no drag-to-resize handle, so the box grows to fit its text instead
+  // (`rows` is the minimum height). Re-measures on every change and when the width changes (rotation, resize).
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const fit = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`; // +2 for the 1px top/bottom border
+  }, []);
+  useLayoutEffect(fit, [value, fit]);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let w = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth !== w) {
+        w = el.clientWidth;
+        fit();
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fit]);
   return (
     <textarea
+      ref={ref}
       value={value}
       rows={rows}
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
-      className={cx(inputBase, 'h-auto py-2.5 leading-relaxed', className)}
+      className={cx(inputBase, 'h-auto resize-none overflow-hidden py-2.5 leading-relaxed', className)}
     />
+  );
+}
+
+// ---------- Switch (iOS-style) ----------
+export function Switch({ checked, onChange, label, hint }: { checked: boolean; onChange: (v: boolean) => void; label: string; hint?: ReactNode }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cx(
+          'relative mt-0.5 h-[31px] w-[51px] shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25',
+          checked ? 'bg-accent' : 'bg-mist-600',
+        )}
+      >
+        <span
+          className={cx(
+            'absolute left-[2px] top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_1px_1px_rgba(0,0,0,0.16)] transition-transform',
+            checked && 'translate-x-[20px]',
+          )}
+        />
+      </button>
+      <span>
+        <span className="block text-[15px] font-medium text-ink">{label}</span>
+        {hint && <span className="block text-xs text-ink-faint">{hint}</span>}
+      </span>
+    </label>
   );
 }
 

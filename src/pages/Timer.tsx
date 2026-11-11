@@ -5,6 +5,8 @@ import { navigate } from '../lib/router';
 import { mmss } from '../lib/time';
 import { Button, cx } from '../components/ui';
 import { FlipCard } from '../components/FlipClock';
+import type { Step } from '../types';
+import { isPour, pourTemp, sortedSteps, stepName } from '../lib/steps';
 import { allRecipes, findRecipe } from './Recipes';
 
 const COMP_S = 360;
@@ -12,7 +14,7 @@ const PREP_S = 180;
 const LEAD_S = 5; // "get ready" countdown before the brew clock starts
 
 let audioCtx: AudioContext | null = null;
-const beep = (freq = 880, ms = 140, times = 1) => {
+const beep = (freq = 880, ms = 140, times = 1, vol = 0.4) => {
   try {
     audioCtx ??= new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     const ctx = audioCtx;
@@ -23,7 +25,7 @@ const beep = (freq = 880, ms = 140, times = 1) => {
       o.frequency.value = freq;
       o.type = 'sine';
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + ms / 1000);
       o.connect(g).connect(ctx.destination);
       o.start(t0);
@@ -48,7 +50,15 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
   const recipes = allRecipes(db.recipes);
   const [recipeId, setRecipeId] = useState(query.get('recipe') ?? db.settings.defaultRecipeId ?? recipes[0]?.id ?? '');
   const recipe = findRecipe(db.recipes, recipeId) ?? recipes[0];
-  const pours = useMemo(() => [...(recipe?.pourSchedule ?? [])].sort((a, b) => a.timeS - b.timeS), [recipe]);
+  /** All brew steps in time order (pours, swirls, stirs, waits…). */
+  const steps = useMemo(() => sortedSteps(recipe?.pourSchedule ?? []), [recipe]);
+  const vary = !!recipe?.params.varyTemp;
+  const tempOf = (s: Step) => (recipe ? pourTemp(recipe, s) : 0);
+  /** Temperature of the pour before `s` (for "switch kettle" cues); the default temp before the first pour. */
+  const prevPourTemp = (s: Step) => {
+    const before = steps.filter((x) => isPour(x) && x.timeS < s.timeS);
+    return before.length ? tempOf(before[before.length - 1]) : recipe?.params.tempC ?? 0;
+  };
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [phaseStart, setPhaseStart] = useState(0);
@@ -86,17 +96,41 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
   const brewElapsed = brewStart != null && drawdown == null ? (now - brewStart) / 1000 : drawdown;
   const leadLeft = leadStart != null ? LEAD_S - (now - leadStart) / 1000 : null;
 
-  // The 0:00 pour (bloom) starts the moment the brew clock starts, so "next" is the first pour still ahead.
-  const nextIdx = brewElapsed == null ? 0 : pours.findIndex((p) => p.timeS > brewElapsed);
-  const current = brewElapsed == null ? null : [...pours].reverse().find((p) => p.timeS <= brewElapsed) ?? null;
-  const next = nextIdx >= 0 ? pours[nextIdx] : null;
+  // The 0:00 step (usually the bloom pour) starts the moment the brew clock starts, so "next" is the first step still ahead.
+  const nextIdx = brewElapsed == null ? 0 : steps.findIndex((p) => p.timeS > brewElapsed);
+  const currentPour = brewElapsed == null ? null : [...steps].reverse().find((p) => isPour(p) && p.timeS <= brewElapsed) ?? null;
+  const next = nextIdx >= 0 ? steps[nextIdx] : null;
   const toNext = next && brewElapsed != null ? next.timeS - brewElapsed : null;
+  const nextIsPour = next ? isPour(next) : false;
+
+  // What the first step is — shown during the count-in and before the brew clock starts.
+  const first = steps[0];
+  const firstLine = !first ? (
+    'No steps in this recipe'
+  ) : isPour(first) ? (
+    <>
+      {first.technique || 'First pour'} → <span className="num text-accent">{first.targetWeightG} g</span>
+      {vary && <span className="num text-ink-muted"> · {tempOf(first)}°C</span>}
+    </>
+  ) : (
+    <>
+      First: <span className="text-accent">{stepName(first)}</span>
+    </>
+  );
+  const kettleSwitch = next && vary && nextIsPour && tempOf(next) !== prevPourTemp(next) ? tempOf(next) : null;
 
   const cue = useCallback(
-    (key: string, kind: 'tick' | 'warn' | 'go' | 'end') => {
+    (key: string, kind: 'tick' | 'warn' | 'go' | 'end' | 'soft-warn' | 'soft-go') => {
       if (fired.current.has(key)) return;
       fired.current.add(key);
-      if (kind === 'tick') {
+      if (kind === 'soft-warn') {
+        // non-pour steps: a quiet, high "pip" so it never sounds like a pour cue
+        if (sound) beep(1480, 55, 1, 0.12);
+        buzz(35);
+      } else if (kind === 'soft-go') {
+        if (sound) beep(1480, 70, 1, 0.16);
+        buzz(50);
+      } else if (kind === 'tick') {
         if (sound) beep(880, 90, 1);
         buzz(60);
       } else if (kind === 'warn') {
@@ -113,14 +147,15 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
     [sound],
   );
 
-  // pour cues
+  // step cues: full beep for pours, a subtle pip for other steps
   useEffect(() => {
     if (brewElapsed == null || drawdown != null) return;
-    pours.forEach((p, i) => {
-      if (p.timeS > 0 && brewElapsed >= p.timeS - 5 && brewElapsed < p.timeS) cue(`w${i}`, 'warn');
-      if (p.timeS > 0 && brewElapsed >= p.timeS && brewElapsed < p.timeS + 1) cue(`g${i}`, 'go');
+    steps.forEach((p, i) => {
+      const pour = isPour(p);
+      if (p.timeS > 0 && brewElapsed >= p.timeS - 5 && brewElapsed < p.timeS) cue(`w${i}`, pour ? 'warn' : 'soft-warn');
+      if (p.timeS > 0 && brewElapsed >= p.timeS && brewElapsed < p.timeS + 1) cue(`g${i}`, pour ? 'go' : 'soft-go');
     });
-  }, [brewElapsed, pours, cue, drawdown]);
+  }, [brewElapsed, steps, cue, drawdown]);
 
   // Brew clock starts exactly LEAD_S after the lead-in began (not "whenever the next frame lands").
   const launchBrew = useCallback(
@@ -243,16 +278,12 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
                 <div className="mt-3 text-[30vw] leading-none sm:text-[160px]">
                   <FlipCard value={String(Math.max(1, Math.ceil(leadLeft)))} tone="accent" />
                 </div>
-                <div className="mt-4 font-display text-2xl text-ink sm:text-3xl">
-                  {pours[0]?.technique || 'First pour'} → <span className="num text-accent">{pours[0]?.targetWeightG ?? '—'} g</span>
-                </div>
+                <div className="mt-4 font-display text-2xl text-ink sm:text-3xl">{firstLine}</div>
               </div>
             ) : brewStart == null ? (
               <>
                 <div className="text-sm text-ink-muted">Brew clock not started</div>
-                <div className="mt-1 font-display text-3xl">
-                  First pour → <span className="num text-accent">{pours[0]?.targetWeightG ?? '—'} g</span>
-                </div>
+                <div className="mt-1 font-display text-3xl">{firstLine}</div>
               </>
             ) : drawdown != null ? (
               <>
@@ -261,23 +292,42 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
               </>
             ) : (
               <>
-                <div className="flex items-center justify-center gap-3 text-sm text-ink-faint">
+                <div className="flex flex-wrap items-center justify-center gap-x-3 text-sm text-ink-faint">
                   Brew clock <span className="num text-xl text-ink">{mmss(brewElapsed)}</span>
-                  {current && <span className="normal-case tracking-normal">· pouring to {current.targetWeightG} g</span>}
+                  {currentPour && (
+                    <span>
+                      · on scale {currentPour.targetWeightG} g{vary && <> · kettle {tempOf(currentPour)}°C</>}
+                    </span>
+                  )}
                 </div>
                 <AnimatePresence mode="wait">
                   {next ? (
                     <motion.div key={nextIdx} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="mt-3">
-                      <div className="text-sm text-ink-muted">Next pour at <span className="num text-ink">{mmss(next.timeS)}</span>{next.technique && ` · ${next.technique}`}</div>
-                      <div className={cx('num mt-1 font-semibold leading-none transition-colors', warnSoon ? 'text-accent' : 'text-ink', 'text-[18vw] sm:text-[140px]')}>
-                        {next.targetWeightG}
-                        <span className="text-[0.35em] text-ink-faint"> g</span>
+                      <div className="text-sm text-ink-muted">
+                        Next {nextIsPour ? 'pour' : 'step'} at <span className="num text-ink">{mmss(next.timeS)}</span>
+                        {next.technique && ` · ${next.technique}`}
                       </div>
+                      {nextIsPour ? (
+                        <div className={cx('num mt-1 font-semibold leading-none transition-colors', warnSoon ? 'text-accent' : 'text-ink', 'text-[18vw] sm:text-[140px]')}>
+                          {next.targetWeightG}
+                          <span className="text-[0.35em] text-ink-faint"> g</span>
+                        </div>
+                      ) : (
+                        <div className={cx('mt-2 font-display leading-none transition-colors', warnSoon ? 'text-accent' : 'text-ink', 'text-[14vw] sm:text-[96px]')}>
+                          {stepName(next)}
+                          {next.durationS ? <span className="num text-[0.4em] text-ink-faint"> {next.durationS} s</span> : null}
+                        </div>
+                      )}
+                      {nextIsPour && vary && (
+                        <div className={cx('mt-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-lg font-semibold', kettleSwitch != null ? 'bg-flag/15 text-flag-soft' : 'bg-mist-800 text-ink')}>
+                          {kettleSwitch != null ? <>Switch kettle → {kettleSwitch}°C</> : <>{tempOf(next)}°C</>}
+                        </div>
+                      )}
                       <div className={cx('num mt-2 text-3xl', warnSoon ? 'animate-pulse text-accent' : 'text-ink-muted')}>in {Math.max(0, Math.ceil(toNext ?? 0))} s</div>
                     </motion.div>
                   ) : (
                     <motion.div key="dd" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
-                      <div className="font-display text-4xl text-ink sm:text-6xl">All poured</div>
+                      <div className="font-display text-4xl text-ink sm:text-6xl">All steps done</div>
                       <div className="mt-2 text-ink-muted">
                         Target drawdown <span className="num text-accent">{mmss(recipe?.targets.drawdownMinS)}–{mmss(recipe?.targets.drawdownMaxS)}</span>
                       </div>
@@ -289,14 +339,23 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
           </div>
         ) : phase === 'idle' ? (
           <div className="w-full max-w-3xl">
-            <div className="mb-3 text-center text-sm text-ink-muted">Pour schedule</div>
+            <div className="mb-3 text-center text-sm text-ink-muted">Steps{vary && ' · temperature varies by pour'}</div>
             <div className="flex flex-wrap justify-center gap-2">
-              {pours.map((p, i) => (
-                <div key={i} className="rounded-2xl bg-white px-5 py-3 text-center shadow-card">
-                  <div className="num text-accent">{mmss(p.timeS)}</div>
-                  <div className="num text-xl">{p.targetWeightG} g</div>
-                </div>
-              ))}
+              {steps.map((p, i) =>
+                isPour(p) ? (
+                  <div key={i} className="rounded-2xl bg-white px-5 py-3 text-center shadow-card">
+                    <div className="num text-accent">{mmss(p.timeS)}</div>
+                    <div className="num text-xl">{p.targetWeightG} g</div>
+                    {vary && <div className="num text-xs text-ink-muted">{tempOf(p)}°C</div>}
+                  </div>
+                ) : (
+                  <div key={i} className="rounded-2xl px-5 py-3 text-center ring-1 ring-inset ring-mist-600">
+                    <div className="num text-ink-muted">{mmss(p.timeS)}</div>
+                    <div className="text-xl">{stepName(p)}</div>
+                    {p.durationS ? <div className="num text-xs text-ink-muted">{p.durationS} s</div> : null}
+                  </div>
+                ),
+              )}
             </div>
           </div>
         ) : null}
@@ -352,7 +411,7 @@ export function TimerPage({ query, onExit }: { query: URLSearchParams; onExit: (
           )}
         </div>
         <p className="text-center text-xs text-ink-faint">
-          {LEAD_S} s count-in before the brew clock. Beeps and vibrates 5 s before each pour. Screen stays awake while running.
+          {LEAD_S} s count-in before the brew clock. Beeps 5 s before each pour (a soft pip for other steps). Screen stays awake while running.
         </p>
       </div>
     </div>

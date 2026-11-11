@@ -1,6 +1,7 @@
 import type { Brew, DB } from '../types';
 import { brewRatio, brewTitle, extractionYield, overallRatio } from './calc';
 import { fmt } from './time';
+import { stepSig } from './steps';
 
 const download = (name: string, content: string, type: string) => {
   const blob = new Blob([content], { type });
@@ -44,7 +45,8 @@ export const exportCsv = (db: DB) => {
     ['waterPpm', (b) => b.spec.params.waterPpm],
     ['bloomG', (b) => b.spec.params.bloomG],
     ['bloomTimeS', (b) => b.spec.params.bloomTimeS],
-    ['pours', (b) => b.spec.pourSchedule.map((p) => `${p.timeS}s:${p.targetWeightG}g`).join(' | ')],
+    ['steps', (b) => stepSig(b.spec)],
+    ['varyTemp', (b) => (b.spec.params.varyTemp ? 'yes' : 'no')],
     ['drawdownS', (b) => b.results.drawdownS],
     ['beverageG', (b) => b.results.beverageG],
     ['finalG', (b) => b.results.finalG],

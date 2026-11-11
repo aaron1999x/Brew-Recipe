@@ -239,7 +239,7 @@ export function RecipeEditPage({ id }: { id: string }) {
         <Card className="mb-5">
           <p className="leading-relaxed text-ink-muted">{source.notes}</p>
           <div className="mt-4">
-            <PourCurve pours={source.pourSchedule} targets={source.targets} />
+            <PourCurve pours={source.pourSchedule} targets={source.targets} spec={source} />
           </div>
           <p className="mt-2 text-xs text-ink-faint">
             Target finish {mmss(source.targets.drawdownMinS)}–{mmss(source.targets.drawdownMaxS)}. Coffee and equipment are placeholders from your comp setup.

@@ -16,7 +16,7 @@ interface Row {
 
 const rows: Row[] = [
   ...SPEC_FIELDS.map((f) => ({ label: f.label, group: f.group, get: (b: Brew) => fmtField(f, getPath(b.spec, f.path)) })),
-  { label: 'Pours', group: 'Pour schedule', get: (b) => pourSig(b.spec) },
+  { label: 'Steps', group: 'Steps', get: (b) => pourSig(b.spec) },
   { label: 'Brew ratio', group: 'Results', get: (b) => ratioLabel(brewRatio(b.spec)) },
   { label: 'Overall ratio', group: 'Results', get: (b) => ratioLabel(overallRatio(b.spec)) },
   { label: 'Drawdown', group: 'Results', get: (b) => mmss(b.results.drawdownS) },

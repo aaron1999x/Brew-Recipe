@@ -1,4 +1,4 @@
-import type { Recipe, RecipeSpec, Settings, Sensory, Pour } from '../types';
+import type { Recipe, RecipeSpec, Settings, Sensory, Step } from '../types';
 
 export const DRIPPERS = ['CAFEC Tritan Flower Dripper Cup 1', 'CAFEC Flower Dripper Deep 27'];
 export const PAPERS = ['CAFEC Abaca', 'CAFEC Abaca+', 'CAFEC TH-1', 'CAFEC TH-2', 'CAFEC TH-3', 'CAFEC Abaca+ Deep 27'];
@@ -122,7 +122,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 // ---------- Champion templates (read-only, built in) ----------
 
-const evenPours = (count: number, grams: number, everyS: number, technique: string, first = 'Bloom'): Pour[] =>
+const evenPours = (count: number, grams: number, everyS: number, technique: string, first = 'Bloom'): Step[] =>
   Array.from({ length: count }, (_, i) => ({
     timeS: i * everyS,
     targetWeightG: grams * (i + 1),
@@ -135,7 +135,7 @@ const champ = (
   name: string,
   notes: string,
   params: Partial<RecipeSpec['params']>,
-  pourSchedule: Pour[],
+  pourSchedule: Step[],
   drawdown: [number, number],
   equipment: Partial<RecipeSpec['equipment']> = {},
 ): Recipe => ({
@@ -199,12 +199,12 @@ export const CHAMPION_RECIPES: Recipe[] = [
     'champ-sherry-hsu',
     'Sherry Hsu (WBrC 2022) — technique',
     'Original: Orea. Technique only: first pour at 70°C, then 95°C. Four pours of 50 g every 30 s. Blended grind: 75% coarse + 25% ground 10 clicks finer. Finish with 15–20 g bypass.',
-    { doseG: 14, brewWaterG: 200, bypassG: 18, tempC: 95, grindSetting: '8.0 / 7.0 (75/25 blend)', bloomG: 50, bloomTimeS: 30 },
+    { doseG: 14, brewWaterG: 200, bypassG: 18, tempC: 95, varyTemp: true, grindSetting: '8.0 / 7.0 (75/25 blend)', bloomG: 50, bloomTimeS: 30 },
     [
-      { timeS: 0, targetWeightG: 50, rateGps: null, technique: '70°C first pour' },
-      { timeS: 30, targetWeightG: 100, rateGps: null, technique: '95°C' },
-      { timeS: 60, targetWeightG: 150, rateGps: null, technique: '95°C' },
-      { timeS: 90, targetWeightG: 200, rateGps: null, technique: '95°C' },
+      { timeS: 0, kind: 'pour', targetWeightG: 50, rateGps: null, tempC: 70, technique: 'Low-temp first pour' },
+      { timeS: 30, kind: 'pour', targetWeightG: 100, rateGps: null, tempC: 95, technique: 'Switch to hot kettle' },
+      { timeS: 60, kind: 'pour', targetWeightG: 150, rateGps: null, tempC: 95, technique: '' },
+      { timeS: 90, kind: 'pour', targetWeightG: 200, rateGps: null, tempC: 95, technique: '' },
     ],
     [150, 170],
   ),

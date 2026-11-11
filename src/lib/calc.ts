@@ -1,6 +1,7 @@
 import type { Brew, DB, PracticeDay, Recipe, RecipeSpec } from '../types';
 import { AQUACODE_STOCK_PPM } from './defaults';
 import { dateKey, fmt, mmss } from './time';
+import { stepSig } from './steps';
 
 export const uid = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -99,10 +100,10 @@ export const SPEC_FIELDS: FieldDef[] = [
   { path: 'params.brewWaterG', label: 'Brew water (g)', group: 'Params' },
   { path: 'params.bypassG', label: 'Bypass (g)', group: 'Params' },
   { path: 'params.tempC', label: 'Temp (°C)', group: 'Params' },
+  { path: 'params.varyTemp', label: 'Vary temp by pour', group: 'Params', format: (v) => (v ? 'On' : 'Off') },
   { path: 'params.grindSetting', label: 'Grind', group: 'Params' },
   { path: 'params.waterPpm', label: 'Water (ppm)', group: 'Params' },
-  { path: 'params.bloomG', label: 'Bloom (g)', group: 'Params' },
-  { path: 'params.bloomTimeS', label: 'Bloom time', group: 'Params', format: sec },
+  // Bloom grams/time are derived from the steps now, so they're covered by the "Steps" diff.
   { path: 'targets.drawdownMinS', label: 'Target drawdown min', group: 'Targets', format: sec },
   { path: 'targets.drawdownMaxS', label: 'Target drawdown max', group: 'Targets', format: sec },
 ];
@@ -112,8 +113,8 @@ export const getPath = (obj: unknown, path: string): unknown =>
 
 export const fmtField = (f: FieldDef, v: unknown) => (f.format ? f.format(v) : g(v));
 
-export const pourSig = (s: RecipeSpec) =>
-  s.pourSchedule.map((p) => `${mmss(p.timeS)}→${p.targetWeightG}g`).join(' · ');
+/** One-line summary of all steps (kept under the old name for existing imports). */
+export const pourSig = stepSig;
 
 export interface Diff {
   path: string;
@@ -126,11 +127,12 @@ export const diffSpecs = (base: RecipeSpec | undefined, cur: RecipeSpec): Diff[]
   if (!base) return [];
   const out: Diff[] = [];
   for (const f of SPEC_FIELDS) {
-    const a = getPath(base, f.path);
-    const b = getPath(cur, f.path);
-    if (String(a ?? '') !== String(b ?? '')) out.push({ path: f.path, label: f.label, from: fmtField(f, a), to: fmtField(f, b) });
+    // compare formatted values so e.g. a missing varyTemp (older data) equals "Off"
+    const a = fmtField(f, getPath(base, f.path));
+    const b = fmtField(f, getPath(cur, f.path));
+    if (a !== b) out.push({ path: f.path, label: f.label, from: a, to: b });
   }
-  if (pourSig(base) !== pourSig(cur)) out.push({ path: 'pourSchedule', label: 'Pour schedule', from: pourSig(base), to: pourSig(cur) });
+  if (stepSig(base) !== stepSig(cur)) out.push({ path: 'pourSchedule', label: 'Steps', from: stepSig(base), to: stepSig(cur) });
   return out;
 };
 

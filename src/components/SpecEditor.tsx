@@ -1,9 +1,10 @@
-import { useState } from 'react';
-import type { Pour, RecipeSpec, RoastLevel } from '../types';
+import { useState, type ReactNode } from 'react';
+import type { RecipeSpec, RoastLevel, Step, StepKind } from '../types';
 import { DRIPPERS, PAPERS, ROAST_LEVELS, TEMP_HINT } from '../lib/defaults';
 import { aquacode, brewRatio, changedPaths, overallRatio, ratioLabel } from '../lib/calc';
+import { STEP_KINDS, bloomInfo, newStep, poursOf, pourTemps, sortedSteps, stepKind, syncBloom, totalPoured } from '../lib/steps';
 import { mmss, parseMmss } from '../lib/time';
-import { Button, Card, Field, NumberInput, Select, TextInput, cx } from './ui';
+import { Button, Card, Field, NumberInput, Select, Switch, TextInput, cx } from './ui';
 import { PourCurve, TempGauge } from './charts';
 
 type Updater = (fn: (s: RecipeSpec) => void) => void;
@@ -12,6 +13,7 @@ export function useSpecUpdater(spec: RecipeSpec, onChange: (s: RecipeSpec) => vo
   return (fn) => {
     const next = structuredClone(spec);
     fn(next);
+    syncBloom(next); // bloom grams/time always follow the steps
     onChange(next);
   };
 }
@@ -35,45 +37,125 @@ function TimeInput({ value, onChange }: { value: number; onChange: (v: number) =
   );
 }
 
-export function PourScheduleEditor({ pours, onChange, changed }: { pours: Pour[]; onChange: (p: Pour[]) => void; changed?: boolean }) {
-  const set = (i: number, patch: Partial<Pour>) => onChange(pours.map((p, j) => (j === i ? { ...p, ...patch } : p)));
+function Mini({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div className={cx('space-y-2', changed && 'rounded-xl ring-1 ring-flag/50 p-2')}>
-      <div className="hidden grid-cols-[90px_100px_90px_1fr_40px] gap-2 px-1 text-[11px] text-ink-faint sm:grid">
-        <span>Time</span>
-        <span>Target</span>
-        <span>Rate</span>
-        <span>Technique</span>
-        <span />
-      </div>
-      {pours.map((p, i) => (
-        <div key={i} className="grid grid-cols-[1fr_1fr_1fr_40px] gap-2 rounded-2xl bg-mist-950 p-2 sm:bg-transparent sm:grid-cols-[90px_100px_90px_1fr_40px] sm:border-0 sm:p-0">
-          <TimeInput value={p.timeS} onChange={(v) => set(i, { timeS: v })} />
-          <NumberInput value={p.targetWeightG} onChange={(v) => set(i, { targetWeightG: v ?? 0 })} suffix="g" />
-          <NumberInput value={p.rateGps ?? null} onChange={(v) => set(i, { rateGps: v })} suffix="g/s" step={0.5} placeholder="—" />
-          <button
-            onClick={() => onChange(pours.filter((_, j) => j !== i))}
-            className="grid h-11 w-10 place-items-center rounded-xl text-ink-faint hover:bg-bad/10 hover:text-bad sm:order-last"
-            aria-label="Remove pour"
-          >
-            ✕
-          </button>
-          <TextInput className="col-span-3 sm:col-span-1" value={p.technique} placeholder="Technique" onChange={(e) => set(i, { technique: e.target.value })} />
-        </div>
-      ))}
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => {
-          const last = pours.at(-1);
-          onChange([...pours, { timeS: (last?.timeS ?? -30) + 30, targetWeightG: (last?.targetWeightG ?? 0) + 50, rateGps: null, technique: '' }]);
-        }}
-      >
-        + Add pour
+    <label className={cx('block min-w-0', className)}>
+      <span className="mb-1 block text-[11px] font-medium text-ink-faint">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** Editable list of brew steps. Pours carry weight/rate/temp; other steps carry a duration (and a name for "Other"). */
+export function StepsEditor({
+  steps,
+  onChange,
+  changed,
+  varyTemp,
+  defaultTemp,
+}: {
+  steps: Step[];
+  onChange: (s: Step[]) => void;
+  changed?: boolean;
+  varyTemp?: boolean;
+  defaultTemp: number;
+}) {
+  const set = (i: number, patch: Partial<Step>) => onChange(steps.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  // keep steps in time order once a time has been committed
+  const setTime = (i: number, t: number) => onChange(sortedSteps(steps.map((s, j) => (j === i ? { ...s, timeS: t } : s))));
+  const setKind = (i: number, kind: StepKind) => {
+    const s = steps[i];
+    const patch: Partial<Step> = { kind };
+    if (kind === 'pour' && !s.targetWeightG) patch.targetWeightG = (poursOf(steps.filter((_, j) => j !== i)).at(-1)?.targetWeightG ?? 0) + 50;
+    if (kind === 'pour' && s.tempC == null) patch.tempC = defaultTemp;
+    set(i, patch);
+  };
+
+  return (
+    <div className={cx('space-y-2', changed && 'rounded-2xl p-2 ring-1 ring-flag/50')}>
+      {steps.map((s, i) => {
+        const kind = stepKind(s);
+        const pour = kind === 'pour';
+        return (
+          <div key={i} className={cx('rounded-2xl p-3', pour ? 'bg-mist-950' : 'bg-mist-950/60 ring-1 ring-inset ring-mist-700')}>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-xs font-semibold text-ink-muted">Step {i + 1}</span>
+              <button
+                onClick={() => onChange(steps.filter((_, j) => j !== i))}
+                className="-mr-1 grid h-8 w-8 place-items-center rounded-full text-ink-faint hover:bg-bad/10 hover:text-bad"
+                aria-label={`Remove step ${i + 1}`}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-[112px_84px_repeat(3,minmax(0,1fr))] sm:items-end">
+              <Mini label="Type">
+                <select
+                  value={kind}
+                  onChange={(e) => setKind(i, e.target.value as StepKind)}
+                  className="h-11 w-full rounded-xl border border-mist-600 bg-white px-3 text-[15px] text-ink focus:border-accent focus:outline-none"
+                  aria-label="Step type"
+                >
+                  {STEP_KINDS.map((k) => (
+                    <option key={k.kind} value={k.kind}>
+                      {k.label}
+                    </option>
+                  ))}
+                </select>
+              </Mini>
+              <Mini label="At">
+                <TimeInput value={s.timeS} onChange={(v) => setTime(i, v)} />
+              </Mini>
+              {pour ? (
+                <>
+                  <Mini label="Scale target">
+                    <NumberInput value={s.targetWeightG} onChange={(v) => set(i, { targetWeightG: v ?? 0 })} suffix="g" />
+                  </Mini>
+                  <Mini label="Rate (optional)">
+                    <NumberInput value={s.rateGps ?? null} onChange={(v) => set(i, { rateGps: v })} suffix="g/s" step={0.5} placeholder="—" />
+                  </Mini>
+                  {varyTemp ? (
+                    <Mini label="Water temp">
+                      <NumberInput value={s.tempC ?? defaultTemp} step={0.5} onChange={(v) => set(i, { tempC: v })} suffix="°C" />
+                    </Mini>
+                  ) : (
+                    <div className="hidden sm:block" />
+                  )}
+                </>
+              ) : (
+                <>
+                  <Mini label="Duration (optional)">
+                    <NumberInput value={s.durationS ?? null} onChange={(v) => set(i, { durationS: v })} suffix="s" placeholder="—" />
+                  </Mini>
+                  {kind === 'other' ? (
+                    <Mini label="Action" className="col-span-2 sm:col-span-1">
+                      <TextInput value={s.label ?? ''} placeholder="e.g. Tap dripper" onChange={(e) => set(i, { label: e.target.value })} />
+                    </Mini>
+                  ) : (
+                    <div className="hidden sm:block" />
+                  )}
+                  <div className="hidden sm:block" />
+                </>
+              )}
+            </div>
+            <TextInput
+              className="mt-2"
+              value={s.technique}
+              placeholder={pour ? 'Technique, e.g. centre spiral' : 'Note, e.g. gentle, 3 rotations'}
+              onChange={(e) => set(i, { technique: e.target.value })}
+            />
+          </div>
+        );
+      })}
+      <Button size="sm" variant="ghost" onClick={() => onChange([...steps, newStep(steps, 'pour', defaultTemp)])}>
+        + Add step
       </Button>
     </div>
   );
 }
+
+/** @deprecated kept for older imports */
+export const PourScheduleEditor = StepsEditor;
 
 export function WaterCalc({ ppm, onPpm }: { ppm: number; onPpm?: (v: number) => void }) {
   const { concentrateG, distilledG } = aquacode(ppm || 0);
@@ -110,6 +192,9 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
   const c = (p: string) => !!baseline && ch.has(p);
   const hint = TEMP_HINT[spec.coffee.roastLevel] ?? null;
   const p = spec.params;
+  const bloom = bloomInfo(spec.pourSchedule);
+  const poured = totalPoured(spec.pourSchedule);
+  const temps = p.varyTemp ? pourTemps(spec).filter((t, i, a) => i === 0 || t !== a[i - 1]) : [];
 
   return (
     <div className="space-y-5">
@@ -177,7 +262,7 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
             <Field label="Bypass" changed={c('params.bypassG')}>
               <NumberInput value={p.bypassG} onChange={(v) => up((s) => void (s.params.bypassG = v ?? 0))} suffix="g" />
             </Field>
-            <Field label="Temp" changed={c('params.tempC')} hint={hint ? `${spec.coffee.roastLevel}: ${hint[0]}–${hint[1]}°C` : undefined}>
+            <Field label={p.varyTemp ? 'Default temp' : 'Temp'} changed={c('params.tempC')} hint={hint ? `${spec.coffee.roastLevel}: ${hint[0]}–${hint[1]}°C` : undefined}>
               <NumberInput value={p.tempC} step={0.5} onChange={(v) => up((s) => void (s.params.tempC = v ?? 0))} suffix="°C" />
             </Field>
             <Field label="Grind" changed={c('params.grindSetting')}>
@@ -186,12 +271,36 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
             <Field label="Water" changed={c('params.waterPpm')}>
               <NumberInput value={p.waterPpm} onChange={(v) => up((s) => void (s.params.waterPpm = v ?? 0))} suffix="ppm" />
             </Field>
-            <Field label="Bloom" changed={c('params.bloomG')}>
-              <NumberInput value={p.bloomG} onChange={(v) => up((s) => void (s.params.bloomG = v ?? 0))} suffix="g" />
+            <Field label="Bloom" hint="From your first pour" className="col-span-2">
+              <div className="flex h-11 items-center rounded-xl bg-mist-950 px-3.5 text-[15px] text-ink-muted">
+                {bloom ? (
+                  <span className="num">
+                    <span className="text-ink">{bloom.grams} g</span>
+                    {bloom.timeS != null && <> · next pour at +{mmss(bloom.timeS)}</>}
+                  </span>
+                ) : (
+                  'Add a pour step'
+                )}
+              </div>
             </Field>
-            <Field label="Bloom time" changed={c('params.bloomTimeS')}>
-              <NumberInput value={p.bloomTimeS} onChange={(v) => up((s) => void (s.params.bloomTimeS = v ?? 0))} suffix="s" />
-            </Field>
+            <div className="col-span-2 sm:col-span-4">
+              <Switch
+                checked={!!p.varyTemp}
+                label="Vary temperature by pour"
+                hint={
+                  p.varyTemp
+                    ? `Each pour sets its own temperature in Steps${temps.length ? ` · ${temps.join(' → ')}°C` : ''}`
+                    : `Every pour uses ${p.tempC}°C`
+                }
+                onChange={(on) =>
+                  up((s) => {
+                    s.params.varyTemp = on;
+                    // first time on: start every pour at the default temp (turning off keeps them, just unused)
+                    if (on) s.pourSchedule.forEach((st) => stepKind(st) === 'pour' && st.tempC == null && (st.tempC = s.params.tempC));
+                  })
+                }
+              />
+            </div>
           </div>
           <div className="flex justify-center rounded-2xl bg-mist-950 px-6 py-3">
             <TempGauge tempC={p.tempC} hint={hint} />
@@ -202,11 +311,29 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
         </div>
       </Card>
 
-      <Card title="Pour schedule">
+      <Card title="Steps" action={<span className="text-sm text-ink-muted">{poursOf(spec.pourSchedule).length} pours · {spec.pourSchedule.length} steps</span>}>
         <div className="grid gap-5 lg:grid-cols-2">
-          <PourScheduleEditor pours={spec.pourSchedule} changed={c('pourSchedule')} onChange={(ps) => up((s) => void (s.pourSchedule = ps))} />
           <div>
-            <PourCurve pours={spec.pourSchedule} targets={spec.targets} />
+            <StepsEditor
+              steps={spec.pourSchedule}
+              varyTemp={!!p.varyTemp}
+              defaultTemp={p.tempC}
+              changed={c('pourSchedule')}
+              onChange={(ps) => up((s) => void (s.pourSchedule = ps))}
+            />
+            {poured > 0 && poured !== p.brewWaterG && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-flag/10 px-4 py-3 text-sm text-warn" role="status">
+                <span>
+                  Steps pour to <span className="num font-semibold">{poured} g</span> but brew water is <span className="num font-semibold">{p.brewWaterG} g</span>.
+                </span>
+                <button className="font-medium underline underline-offset-2" onClick={() => up((s) => void (s.params.brewWaterG = poured))}>
+                  Set brew water to {poured} g
+                </button>
+              </div>
+            )}
+          </div>
+          <div>
+            <PourCurve pours={spec.pourSchedule} targets={spec.targets} spec={spec} />
           </div>
         </div>
       </Card>

@@ -61,7 +61,11 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  if (isTimer) return <TimerPage query={route.query} onExit={() => (history.length > 1 ? history.back() : navigate('/'))} />;
+  if (isTimer)
+    return (
+      // keyed by recipe so opening a different recipe's rehearsal link starts fresh
+      <TimerPage key={route.query.get('recipe') ?? ''} query={route.query} onExit={() => (history.length > 1 ? history.back() : navigate('/'))} />
+    );
 
   const isHome = route.parts.length === 0;
 

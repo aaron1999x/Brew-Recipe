@@ -11,13 +11,14 @@ I'm competing in the Brewers Cup on 27 November 2026. BLOOM is where I log every
 ## Features
 
 - **Recipes with version history**: a reusable template for every recipe. Promote a good brew straight into the next version. Includes read-only World Brewers Cup champion templates (Kasuya 4:6, Chad Wang, Matt Winton, Carlos Medina, Sherry Hsu), scaled for the CAFEC Cup 1 dripper.
+- **Brew steps, not just pours**: pours, swirls, stirs, waits or custom actions on one timeline. Turn on "vary temperature by pour" to give each pour its own water temperature (e.g. 70°C bloom, then 95°C). The bloom is derived from the first pour, and a warning appears if the steps don't add up to the brew water.
 - **Brew log**: each brew snapshots its recipe, so tweaks never overwrite it. Changes are highlighted against the recipe. Live brew ratio, extraction yield and a ≥150 mL submission check.
 - **Sensory scoring**: eight sliders with a live radar chart, plus flavour tags.
 - **Trends**: grind vs drawdown, overall score over time, and a TDS/EY brew control chart with the target box.
 - **Compare**: overlay 2–3 brews on one radar, with a side-by-side spec table that highlights the differences.
 - **Practice days**: a timeline with an end-of-day conclusion and next-session plan for each day.
 - **Bean budget**: tracks the 200 g of practice beans across brews *and* discards (sorting defects, grinder purge, spills).
-- **Rehearsal timer**: a full-screen 6:00 competition clock on split-flap cards, a 5 s count-in, pour cues in huge type, and a beep and vibration before each pour. Log the drawdown and it opens a prefilled brew.
+- **Rehearsal timer**: a full-screen 6:00 competition clock on split-flap cards, a 5 s count-in, step cues in huge type, "switch kettle" callouts when the temperature changes, and a beep and vibration before each pour (a soft pip for other steps). Log the drawdown and it opens a prefilled brew.
 - **Offline-first sync**: works without signal, then syncs to a Google Sheet when back online.
 
 <table>
@@ -63,6 +64,7 @@ I built BLOOM by pairing with [Claude Code](https://claude.com/claude-code). I w
 7. **Typography**: switched to Bricolage Grotesque.
 8. **Discarded-bean log**: sorting losses now count against the practice bean budget.
 9. **5-second count-in** before the brew clock in the rehearsal timer.
+10. **Pour schedule → brew steps**: I noticed not every step is a pour. Claude proposed a design first (step types, an optional per-pour temperature switch, the bloom derived from the steps, a check that pours add up to the brew water), and I approved it before anything was built. Existing data loads unchanged.
 
 <details>
 <summary><strong>My original prompt</strong> (click to expand)</summary>

@@ -374,7 +374,7 @@ export function BrewFormPage({ id, query }: { id?: string; query: URLSearchParam
         >
           <span>
             <span className="font-display text-lg">Recipe snapshot</span>
-            <span className="ml-3 text-sm text-ink-faint">coffee, equipment, params, pours, targets — edits stay on this brew</span>
+            <span className="ml-3 text-sm text-ink-faint">coffee, equipment, params, steps, targets — edits stay on this brew</span>
           </span>
           <span className="text-accent">{showSpec ? '▾' : '▸'}</span>
         </button>
@@ -382,7 +382,7 @@ export function BrewFormPage({ id, query }: { id?: string; query: URLSearchParam
           <SpecEditor spec={brew.spec} baseline={brew.baseline} onChange={(s) => set({ spec: s })} />
         ) : (
           <Card>
-            <PourCurve pours={brew.spec.pourSchedule} targets={brew.spec.targets} drawdownS={brew.results.drawdownS} />
+            <PourCurve pours={brew.spec.pourSchedule} targets={brew.spec.targets} drawdownS={brew.results.drawdownS} spec={brew.spec} />
           </Card>
         )}
       </div>
@@ -461,7 +461,7 @@ export function BrewDetailPage({ id }: { id: string }) {
             <ComputedPanel brew={brew} />
           </Card>
           <Card title="Pour curve" delay={0.1}>
-            <PourCurve pours={brew.spec.pourSchedule} targets={brew.spec.targets} drawdownS={brew.results.drawdownS} />
+            <PourCurve pours={brew.spec.pourSchedule} targets={brew.spec.targets} drawdownS={brew.results.drawdownS} spec={brew.spec} />
           </Card>
         </div>
       </div>

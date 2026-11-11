@@ -16,7 +16,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { Pour, Sensory, Targets } from '../types';
+import type { RecipeSpec, Sensory, Step, Targets } from '../types';
+import { isPour, poursOf, pourTemp, sortedSteps, stepName } from '../lib/steps';
 import { SENSORY_KEYS } from '../lib/defaults';
 import { mmss } from '../lib/time';
 
@@ -106,9 +107,13 @@ export function SensoryRadar({
 }
 
 // ---------- Pour curve ----------
-export function pourCurvePoints(pours: Pour[], drawdownS?: number | null) {
-  const sorted = [...pours].sort((a, b) => a.timeS - b.timeS);
-  const pts: { t: number; w: number }[] = [{ t: 0, w: 0 }];
+type CurvePt = { t: number; w: number; c?: number };
+
+/** Water-on-scale vs time, built from the pour steps only (other steps don't add water). */
+export function pourCurvePoints(steps: Step[], drawdownS?: number | null, tempOf?: (s: Step) => number) {
+  const sorted = poursOf(steps);
+  const all = sortedSteps(steps);
+  const pts: CurvePt[] = [{ t: 0, w: 0 }];
   let w = 0;
   sorted.forEach((p, i) => {
     const next = sorted[i + 1];
@@ -116,12 +121,13 @@ export function pourCurvePoints(pours: Pour[], drawdownS?: number | null) {
     const amount = Math.max(0, p.targetWeightG - w);
     let dur = p.rateGps && p.rateGps > 0 ? amount / p.rateGps : Math.min(10, amount / 5);
     if (next) dur = Math.min(dur, Math.max(1, next.timeS - p.timeS - 1));
-    if (p.timeS > 0 || i > 0) pts.push({ t: p.timeS, w });
+    const c = tempOf?.(p);
+    if (p.timeS > 0 || i > 0) pts.push({ t: p.timeS, w, c });
     w = p.targetWeightG;
-    pts.push({ t: Math.round(p.timeS + dur), w });
+    pts.push({ t: Math.round(p.timeS + dur), w, c });
   });
   const lastPourEnd = pts[pts.length - 1].t;
-  const end = Math.max(drawdownS ?? 0, (sorted.at(-1)?.timeS ?? 0) + 30, lastPourEnd + 20);
+  const end = Math.max(drawdownS ?? 0, (all.at(-1)?.timeS ?? 0) + 30, lastPourEnd + 20);
   pts.push({ t: end, w });
   return pts;
 }
@@ -132,16 +138,25 @@ export function PourCurve({
   drawdownS,
   height = 220,
   compact,
+  spec,
 }: {
-  pours: Pour[];
+  /** All brew steps (pours + others). */
+  pours: Step[];
   targets?: Targets;
   drawdownS?: number | null;
   height?: number;
   compact?: boolean;
+  /** Pass to show per-pour temperatures in the tooltip when temps vary. */
+  spec?: Pick<RecipeSpec, 'params'>;
 }) {
   const anim = useChartAnim();
-  const pts = useMemo(() => pourCurvePoints(pours, drawdownS), [pours, drawdownS]);
-  const key = pts.map((p) => `${p.t}:${p.w}`).join('|');
+  const vary = !!spec?.params.varyTemp;
+  const pts = useMemo(
+    () => pourCurvePoints(pours, drawdownS, vary && spec ? (s) => pourTemp(spec, s) : undefined),
+    [pours, drawdownS, vary, spec],
+  );
+  const markers = sortedSteps(pours).filter((s) => !isPour(s));
+  const key = pts.map((p) => `${p.t}:${p.w}`).join('|') + markers.map((m) => m.timeS).join(',');
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart key={key} data={pts} margin={{ top: 22, right: 12, bottom: 0, left: compact ? 8 : -8 }}>
@@ -166,7 +181,24 @@ export function PourCurve({
           </>
         )}
         {drawdownS != null && <ReferenceLine x={drawdownS} stroke="#F08C00" strokeWidth={2} label={{ value: mmss(drawdownS), fill: '#B25E00', fontSize: 11, position: 'top' }} />}
-        <Tooltip {...tooltipStyle} labelFormatter={(v) => mmss(Number(v))} formatter={(v) => [`${v} g`, 'water']} />
+        {/* non-pour steps (swirl, stir, wait, other) as labelled markers */}
+        {markers.map((m, i) => (
+          <ReferenceLine
+            key={`m${i}`}
+            x={m.timeS}
+            stroke="#AEAEB2"
+            strokeDasharray="2 3"
+            label={compact ? undefined : { value: stepName(m), fill: '#6E6E73', fontSize: 10, position: 'insideTopLeft' }}
+          />
+        ))}
+        <Tooltip
+          {...tooltipStyle}
+          labelFormatter={(v) => mmss(Number(v))}
+          formatter={(v, _n, item) => {
+            const c = (item?.payload as CurvePt | undefined)?.c;
+            return [`${v} g${c != null ? ` · ${c}°C` : ''}`, 'water'];
+          }}
+        />
         <Area type="linear" dataKey="w" stroke={ACCENT} strokeWidth={2} fill="url(#pourFill)" dot={false} activeDot={{ r: 5, fill: ACCENT }} {...anim} animationDuration={1600} />
       </AreaChart>
     </ResponsiveContainer>

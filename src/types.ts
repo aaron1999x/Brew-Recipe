@@ -24,19 +24,41 @@ export interface BrewParams {
   doseG: number;
   brewWaterG: number;
   bypassG: number;
+  /** Default water temperature (used for every pour unless varyTemp is on). */
   tempC: number;
+  /** When true, each pour can set its own tempC. Off (or missing on older data) = every pour uses tempC. */
+  varyTemp?: boolean;
   grindSetting: string;
   waterPpm: number;
+  /** Derived from the steps (first pour + time to the next pour); kept in sync on save for exports/older data. */
   bloomG: number;
   bloomTimeS: number;
 }
 
-export interface Pour {
+export type StepKind = 'pour' | 'swirl' | 'stir' | 'wait' | 'other';
+
+/**
+ * One brew step. Stored under `pourSchedule` for backwards compatibility;
+ * entries without `kind` (all data saved before steps existed) are pours.
+ */
+export interface Step {
   timeS: number;
+  kind?: StepKind;
+  /** Pours: cumulative scale weight after this pour. Ignored for other kinds. */
   targetWeightG: number;
   rateGps?: number | null;
+  /** Pours only, used when params.varyTemp is on. */
+  tempC?: number | null;
+  /** Non-pour steps: how long the action takes (e.g. swirl 3 s). */
+  durationS?: number | null;
+  /** 'other' steps: custom action name (e.g. "Tap dripper"). */
+  label?: string;
+  /** Free-text technique / note. */
   technique: string;
 }
+
+/** @deprecated use Step — kept so older imports keep compiling. */
+export type Pour = Step;
 
 export interface Targets {
   drawdownMinS: number;
@@ -52,7 +74,8 @@ export interface RecipeSpec {
   coffee: Coffee;
   equipment: Equipment;
   params: BrewParams;
-  pourSchedule: Pour[];
+  /** Brew steps (pours, swirls, stirs, waits…). Name kept for stored-data compatibility. */
+  pourSchedule: Step[];
   targets: Targets;
 }
 
