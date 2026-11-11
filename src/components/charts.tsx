@@ -219,7 +219,7 @@ const tempColor = (c: number) => {
   return `rgb(${Math.round(lerp(a[0], b[0], k))},${Math.round(lerp(a[1], b[1], k))},${Math.round(lerp(a[2], b[2], k))})`;
 };
 
-export function TempGauge({ tempC, hint }: { tempC: number; hint?: [number, number] | null }) {
+export function TempGauge({ tempC }: { tempC: number }) {
   const reduce = useReducedMotion();
   const min = 80;
   const max = 100;
@@ -228,14 +228,10 @@ export function TempGauge({ tempC, hint }: { tempC: number; hint?: [number, numb
   const tubeH = 150;
   const fillH = tubeH * pct;
   const color = tempColor(tempC);
-  const band = hint
-    ? { y: tubeTop + tubeH * (1 - (hint[1] - min) / (max - min)), h: (tubeH * (hint[1] - hint[0])) / (max - min) }
-    : null;
-  const t = reduce ? { duration: 0 } : { type: 'spring' as const, stiffness: 60, damping: 14 };
+  const t =reduce ? { duration: 0 } : { type: 'spring' as const, stiffness: 60, damping: 14 };
   return (
     <div className="flex items-center gap-4">
       <svg viewBox="0 0 70 210" className="h-48 w-16 shrink-0" role="img" aria-label={`Water temperature ${tempC} °C`}>
-        {band && <rect x={6} y={band.y} width={58} height={band.h} rx={3} fill={ACCENT} opacity={0.12} />}
         <rect x={26} y={tubeTop - 4} width={18} height={tubeH + 20} rx={9} fill="#F5F5F7" stroke="#E5E5EA" strokeWidth={1} />
         <motion.rect
           x={30}
@@ -263,12 +259,6 @@ export function TempGauge({ tempC, hint }: { tempC: number; hint?: [number, numb
           {tempC}
           <span className="text-xl text-ink-faint">°C</span>
         </motion.div>
-        {hint && (
-          <div className="mt-1 text-xs text-ink-muted">
-            Roast hint <span className="num text-accent">{hint[0]}–{hint[1]}°C</span>
-            {(tempC < hint[0] || tempC > hint[1]) && <span className="ml-1 text-warn">· outside</span>}
-          </div>
-        )}
       </div>
     </div>
   );

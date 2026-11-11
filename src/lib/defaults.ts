@@ -40,12 +40,6 @@ export const DEFAULT_SENSORY: Sensory = {
   overall: 5,
 };
 
-export const TEMP_HINT: Record<string, [number, number] | null> = {
-  Light: [92, 94],
-  'Medium-light': [90, 92],
-  Medium: null,
-};
-
 export const AQUACODE_STOCK_PPM = 590;
 
 export const STARTER_RECIPE_ID = 'rcp-lamari-v1';

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { RecipeSpec, RoastLevel, Step, StepKind } from '../types';
-import { DRIPPERS, PAPERS, ROAST_LEVELS, TEMP_HINT } from '../lib/defaults';
+import { DRIPPERS, PAPERS, ROAST_LEVELS } from '../lib/defaults';
 import { aquacode, brewRatio, changedPaths, overallRatio, ratioLabel } from '../lib/calc';
 import { STEP_KINDS, bloomInfo, newStep, poursOf, pourTemps, sortedSteps, stepKind, syncBloom, totalPoured } from '../lib/steps';
 import { mmss, parseMmss } from '../lib/time';
@@ -76,6 +76,10 @@ export function StepsEditor({
       {steps.map((s, i) => {
         const kind = stepKind(s);
         const pour = kind === 'pour';
+        // how much this pour adds on top of the previous pour (targets are cumulative scale readings)
+        const pourList = poursOf(steps);
+        const pi = pourList.indexOf(s);
+        const added = pour && pi >= 0 ? s.targetWeightG - (pi > 0 ? pourList[pi - 1].targetWeightG : 0) : null;
         return (
           <div key={i} className={cx('rounded-2xl p-3', pour ? 'bg-mist-950' : 'bg-mist-950/60 ring-1 ring-inset ring-mist-700')}>
             <div className="mb-1.5 flex items-center justify-between">
@@ -110,6 +114,11 @@ export function StepsEditor({
                 <>
                   <Mini label="Scale target">
                     <NumberInput value={s.targetWeightG} onChange={(v) => set(i, { targetWeightG: v ?? 0 })} suffix="g" />
+                    {added != null && (
+                      <span className={cx('mt-1 block text-[11px]', added < 0 ? 'font-medium text-bad' : 'text-ink-faint')}>
+                        {added < 0 ? `${added} g — lower than the last pour` : `+${added} g this pour`}
+                      </span>
+                    )}
                   </Mini>
                   <Mini label="Rate (optional)">
                     <NumberInput value={s.rateGps ?? null} onChange={(v) => set(i, { rateGps: v })} suffix="g/s" step={0.5} placeholder="—" />
@@ -190,7 +199,6 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
   const up = useSpecUpdater(spec, onChange);
   const ch = changedPaths(baseline, spec);
   const c = (p: string) => !!baseline && ch.has(p);
-  const hint = TEMP_HINT[spec.coffee.roastLevel] ?? null;
   const p = spec.params;
   const bloom = bloomInfo(spec.pourSchedule);
   const poured = totalPoured(spec.pourSchedule);
@@ -262,7 +270,7 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
             <Field label="Bypass" changed={c('params.bypassG')}>
               <NumberInput value={p.bypassG} onChange={(v) => up((s) => void (s.params.bypassG = v ?? 0))} suffix="g" />
             </Field>
-            <Field label={p.varyTemp ? 'Default temp' : 'Temp'} changed={c('params.tempC')} hint={hint ? `${spec.coffee.roastLevel}: ${hint[0]}–${hint[1]}°C` : undefined}>
+            <Field label={p.varyTemp ? 'Default temp' : 'Temp'} changed={c('params.tempC')}>
               <NumberInput value={p.tempC} step={0.5} onChange={(v) => up((s) => void (s.params.tempC = v ?? 0))} suffix="°C" />
             </Field>
             <Field label="Grind" changed={c('params.grindSetting')}>
@@ -303,7 +311,7 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
             </div>
           </div>
           <div className="flex justify-center rounded-2xl bg-mist-950 px-6 py-3">
-            <TempGauge tempC={p.tempC} hint={hint} />
+            <TempGauge tempC={p.tempC} />
           </div>
         </div>
         <div className="mt-5">
@@ -324,7 +332,8 @@ export function SpecEditor({ spec, onChange, baseline }: { spec: RecipeSpec; onC
             {poured > 0 && poured !== p.brewWaterG && (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-flag/10 px-4 py-3 text-sm text-warn" role="status">
                 <span>
-                  Steps pour to <span className="num font-semibold">{poured} g</span> but brew water is <span className="num font-semibold">{p.brewWaterG} g</span>.
+                  Your last pour ends at <span className="num font-semibold">{poured} g</span> on the scale, but Brew water in Parameters says{' '}
+                  <span className="num font-semibold">{p.brewWaterG} g</span>. Ratios are calculated from Brew water.
                 </span>
                 <button className="font-medium underline underline-offset-2" onClick={() => up((s) => void (s.params.brewWaterG = poured))}>
                   Set brew water to {poured} g
